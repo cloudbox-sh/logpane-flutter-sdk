@@ -79,7 +79,7 @@ try {
 ## User Identification
 
 ```dart
-Logpane.instance.identify(userId: user.id, traits: {
+Logpane.instance.identify(user.id, {
   'username': user.name,
 });
 
@@ -101,14 +101,20 @@ Logpane.instance.reset();
 
 ```dart
 await Logpane.init(
-  endpoint: 'https://api.yourdomain.com',
-  apiKey: 'your-api-key',
+  apiKey: 'YOUR_API_KEY',
   flushIntervalSeconds: 30,    // How often to send batched events
   maxBatchSize: 50,            // Max events per batch
   maxQueueSize: 1000,          // Max events in offline queue
-  enableInDebug: false,        // Disable in debug mode
 );
 ```
+
+## Debug vs Production
+
+The SDK automatically tags every event with an `environment` field:
+- **debug** -- when running in debug mode (`kDebugMode = true`)
+- **production** -- in release/profile builds
+
+Events are always sent regardless of build mode. You can filter debug data in the Logpane dashboard.
 
 ## License
 
