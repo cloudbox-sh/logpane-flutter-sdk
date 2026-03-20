@@ -27,7 +27,6 @@ void main() {
       expect(config.flushIntervalSeconds, equals(30));
       expect(config.maxBatchSize, equals(50));
       expect(config.maxQueueSize, equals(1000));
-      expect(config.enableInDebug, isFalse);
     });
   });
 

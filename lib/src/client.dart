@@ -29,16 +29,12 @@ class LogpaneConfig {
   /// Maximum number of events stored locally. Default: 1000.
   final int maxQueueSize;
 
-  /// Whether to enable tracking in debug mode. Default: false.
-  final bool enableInDebug;
-
   const LogpaneConfig({
     required this.apiKey,
     this.endpoint = _defaultEndpoint,
     this.flushIntervalSeconds = 30,
     this.maxBatchSize = 50,
     this.maxQueueSize = 1000,
-    this.enableInDebug = false,
   });
 }
 
@@ -99,7 +95,6 @@ class Logpane with WidgetsBindingObserver {
     int flushIntervalSeconds = 30,
     int maxBatchSize = 50,
     int maxQueueSize = 1000,
-    bool enableInDebug = false,
   }) async {
     if (_instance != null && _instance!._initialized) {
       return _instance!;
@@ -112,26 +107,7 @@ class Logpane with WidgetsBindingObserver {
       flushIntervalSeconds: flushIntervalSeconds,
       maxBatchSize: maxBatchSize,
       maxQueueSize: maxQueueSize,
-      enableInDebug: enableInDebug,
     );
-
-    // In debug mode, skip initialization unless explicitly enabled.
-    if (kDebugMode && !enableInDebug) {
-      final noOpInstance = Logpane._(
-        config: config,
-        eventQueue: EventQueue(maxQueueSize: maxQueueSize),
-        sessionTracker: SessionTracker(),
-        httpClient: LogpaneHttpClient(
-          endpoint: endpoint,
-          apiKey: apiKey,
-        ),
-        navigatorObserver: LogpaneNavigatorObserver(onScreenView: (_) {}),
-      );
-      noOpInstance._enabled = false;
-      noOpInstance._initialized = true;
-      _instance = noOpInstance;
-      return noOpInstance;
-    }
 
     final eventQueue = EventQueue(maxQueueSize: maxQueueSize);
     final sessionTracker = SessionTracker();
@@ -476,6 +452,7 @@ class Logpane with WidgetsBindingObserver {
       },
       'locale': info.locale,
       'sdk_version': sdkVersion,
+      'environment': kDebugMode ? 'debug' : 'production',
     };
   }
 
