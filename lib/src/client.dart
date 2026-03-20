@@ -42,7 +42,7 @@ class LogpaneConfig {
 ///
 /// Initialize with [Logpane.init] before accessing [Logpane.instance].
 class Logpane with WidgetsBindingObserver {
-  static const String sdkVersion = '1.0.0';
+  static const String sdkVersion = '0.1.3';
 
   static Logpane? _instance;
 
@@ -58,13 +58,16 @@ class Logpane with WidgetsBindingObserver {
     return _instance!;
   }
 
+  /// Returns true if the SDK has been fully initialized.
+  static bool get isInitialized => _instance?._initialized ?? false;
+
   final LogpaneConfig _config;
   final EventQueue _eventQueue;
   final SessionTracker _sessionTracker;
   final LogpaneHttpClient _httpClient;
   final LogpaneNavigatorObserver _navigatorObserver;
 
-  late final DeviceInfoCollector _deviceInfo;
+  DeviceInfoCollector? _deviceInfo;
 
   bool _enabled = true;
   bool _initialized = false;
@@ -123,34 +126,44 @@ class Logpane with WidgetsBindingObserver {
       httpClient: httpClient,
       navigatorObserver: LogpaneNavigatorObserver(
         onScreenView: (screenName) {
-          if (_instance != null) {
+          if (_instance != null && _instance!._initialized) {
             _instance!.trackScreen(screenName);
           }
         },
       ),
     );
 
-    _instance = instance;
+    try {
+      // Initialize all components before exposing the instance.
+      await eventQueue.initialize();
+      await sessionTracker.initialize();
 
-    // Initialize components.
-    await eventQueue.initialize();
-    await sessionTracker.initialize();
+      final deviceInfo = DeviceInfoCollector();
+      await deviceInfo.initialize();
+      instance._deviceInfo = deviceInfo;
 
-    instance._deviceInfo = DeviceInfoCollector();
-    await instance._deviceInfo.initialize();
+      instance._anonymousId = await sessionTracker.getAnonymousId();
 
-    instance._anonymousId = await sessionTracker.getAnonymousId();
+      // Set _instance only after all initialization is complete.
+      _instance = instance;
+      instance._initialized = true;
 
-    // Track session start.
-    await instance._trackSessionStart();
+      // Track session start.
+      await instance._trackSessionStart();
 
-    // Start the periodic flush timer.
-    instance._startFlushTimer();
+      // Start the periodic flush timer.
+      instance._startFlushTimer();
 
-    // Observe app lifecycle for session management and flushing.
-    WidgetsBinding.instance.addObserver(instance);
+      // Observe app lifecycle for session management and flushing.
+      WidgetsBinding.instance.addObserver(instance);
+    } catch (e) {
+      // If initialization fails, ensure we don't leave a half-baked instance.
+      debugPrint('Logpane: initialization failed: $e');
+      _instance = null;
+      instance._initialized = false;
+      rethrow;
+    }
 
-    instance._initialized = true;
     return instance;
   }
 
@@ -173,16 +186,20 @@ class Logpane with WidgetsBindingObserver {
     String eventName, [
     Map<String, dynamic>? properties,
   ]) async {
-    if (!_enabled) return;
+    if (!_initialized || !_enabled) return;
 
-    final event = _buildEvent(
-      type: 'analytics',
-      eventName: eventName,
-      eventType: 'custom',
-      properties: properties,
-    );
+    try {
+      final event = _buildEvent(
+        type: 'analytics',
+        eventName: eventName,
+        eventType: 'custom',
+        properties: properties,
+      );
 
-    await _enqueue(event);
+      await _enqueue(event);
+    } catch (e) {
+      debugPrint('Logpane: failed to track event: $e');
+    }
   }
 
   /// Tracks a screen view event.
@@ -193,22 +210,26 @@ class Logpane with WidgetsBindingObserver {
     String screenName, [
     Map<String, dynamic>? properties,
   ]) async {
-    if (!_enabled) return;
+    if (!_initialized || !_enabled) return;
 
-    final mergedProperties = <String, dynamic>{
-      'screen_name': screenName,
-      ...?properties,
-    };
+    try {
+      final mergedProperties = <String, dynamic>{
+        'screen_name': screenName,
+        ...?properties,
+      };
 
-    final event = _buildEvent(
-      type: 'analytics',
-      eventName: screenName,
-      eventType: 'screen_view',
-      properties: mergedProperties,
-      screenName: screenName,
-    );
+      final event = _buildEvent(
+        type: 'analytics',
+        eventName: screenName,
+        eventType: 'screen_view',
+        properties: mergedProperties,
+        screenName: screenName,
+      );
 
-    await _enqueue(event);
+      await _enqueue(event);
+    } catch (e) {
+      debugPrint('Logpane: failed to track screen: $e');
+    }
   }
 
   /// Captures an error with its stack trace.
@@ -226,17 +247,21 @@ class Logpane with WidgetsBindingObserver {
     String? context,
     Map<String, dynamic>? extras,
   }) async {
-    if (!_enabled) return;
+    if (!_initialized || !_enabled) return;
 
-    final event = _buildErrorEvent(
-      error: error,
-      stackTrace: stackTrace,
-      context: context,
-      extras: extras,
-      handled: true,
-    );
+    try {
+      final event = _buildErrorEvent(
+        error: error,
+        stackTrace: stackTrace,
+        context: context,
+        extras: extras,
+        handled: true,
+      );
 
-    await _enqueue(event);
+      await _enqueue(event);
+    } catch (e) {
+      debugPrint('Logpane: failed to capture error: $e');
+    }
   }
 
   /// Captures a Flutter framework error.
@@ -249,22 +274,27 @@ class Logpane with WidgetsBindingObserver {
   /// };
   /// ```
   Future<void> captureFlutterError(FlutterErrorDetails details) async {
-    if (!_enabled) return;
+    if (!_initialized || !_enabled) return;
 
-    final event = _buildErrorEvent(
-      error: details.exception,
-      stackTrace: details.stack,
-      context: details.context?.toString(),
-      handled: false,
-    );
+    try {
+      final event = _buildErrorEvent(
+        error: details.exception,
+        stackTrace: details.stack,
+        context: details.context?.toString(),
+        handled: false,
+      );
 
-    await _enqueue(event);
+      await _enqueue(event);
+    } catch (e) {
+      debugPrint('Logpane: failed to capture Flutter error: $e');
+    }
   }
 
   /// Identifies the current user for associating events with a user.
   ///
   /// Call this after login or when user information becomes available.
   void identify(String userId, [Map<String, dynamic>? traits]) {
+    if (!_initialized) return;
     _userId = userId;
     _userTraits = traits;
   }
@@ -273,6 +303,7 @@ class Logpane with WidgetsBindingObserver {
   ///
   /// Call this on logout to stop associating events with the previous user.
   void reset() {
+    if (!_initialized) return;
     _userId = null;
     _userTraits = null;
   }
@@ -291,16 +322,38 @@ class Logpane with WidgetsBindingObserver {
   /// batch size threshold is reached. Call this when you need to ensure
   /// events are sent immediately (e.g., before showing a confirmation).
   Future<void> flush() async {
-    if (!_enabled) return;
-    await _flushQueue();
+    if (!_initialized || !_enabled) return;
+
+    try {
+      await _flushQueue();
+    } catch (e) {
+      debugPrint('Logpane: failed to flush queue: $e');
+    }
   }
 
   /// Shuts down the SDK, flushing any remaining events.
   Future<void> dispose() async {
     _flushTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    await _flushQueue();
-    await _eventQueue.close();
+
+    try {
+      WidgetsBinding.instance.removeObserver(this);
+    } catch (_) {
+      // May fail if binding is not initialized.
+    }
+
+    try {
+      await _flushQueue();
+    } catch (e) {
+      debugPrint('Logpane: failed to flush on dispose: $e');
+    }
+
+    try {
+      await _eventQueue.close();
+    } catch (e) {
+      debugPrint('Logpane: failed to close event queue: $e');
+    }
+
+    _initialized = false;
     _instance = null;
   }
 
@@ -308,6 +361,8 @@ class Logpane with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_initialized) return;
+
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
@@ -354,12 +409,16 @@ class Logpane with WidgetsBindingObserver {
   }
 
   Future<void> _flushQueue() async {
-    final events = await _eventQueue.drain(_config.maxBatchSize);
-    if (events.isEmpty) return;
+    try {
+      final events = await _eventQueue.drain(_config.maxBatchSize);
+      if (events.isEmpty) return;
 
-    final success = await _httpClient.sendBatch(events);
-    if (!success) {
-      await _eventQueue.requeue(events);
+      final success = await _httpClient.sendBatch(events);
+      if (!success) {
+        await _eventQueue.requeue(events);
+      }
+    } catch (e) {
+      debugPrint('Logpane: flush failed: $e');
     }
   }
 
@@ -437,7 +496,13 @@ class Logpane with WidgetsBindingObserver {
   }
 
   Map<String, dynamic> _buildContext() {
-    final info = _deviceInfo.info;
+    final info = _deviceInfo?.info;
+    if (info == null) {
+      return {
+        'sdk_version': sdkVersion,
+        'environment': kDebugMode ? 'debug' : 'production',
+      };
+    }
     return {
       'app': {
         'version': info.appVersion,
@@ -481,7 +546,7 @@ class Logpane with WidgetsBindingObserver {
         'index': int.tryParse(match.group(1) ?? '0') ?? 0,
         'function': match.group(2) ?? '',
         'file': file,
-        'line': int.tryParse(match.group(3) ?? '0') ?? 0,
+        'line': int.tryParse(match.group(4) ?? '0') ?? 0,
         'column': int.tryParse(match.group(5) ?? '0') ?? 0,
         'in_app': isInApp,
       });

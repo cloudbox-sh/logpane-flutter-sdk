@@ -46,7 +46,8 @@ void main() {
       expect(isNew, isFalse);
     });
 
-    test('onBackgrounded then immediate onResumed does not create new session', () {
+    test('onBackgrounded then immediate onResumed does not create new session',
+        () {
       tracker.onBackgrounded();
       final isNew = tracker.onResumed();
       expect(isNew, isFalse);
@@ -103,7 +104,10 @@ void main() {
       );
 
       final result = await client.sendBatch([
-        {'type': 'analytics', 'data': {'event': 'test'}},
+        {
+          'type': 'analytics',
+          'data': {'event': 'test'},
+        },
       ]);
 
       expect(result, isTrue);
@@ -197,8 +201,13 @@ void main() {
         client: mockClient,
       );
 
-      await client.sendBatch([{'type': 'analytics', 'data': {}}]);
-      expect(capturedUri?.toString(), equals('https://api.logpane.dev/v1/ingest'));
+      await client.sendBatch([
+        {'type': 'analytics', 'data': {}},
+      ]);
+      expect(
+        capturedUri?.toString(),
+        equals('https://api.logpane.dev/v1/ingest'),
+      );
     });
 
     test('returns false on network error', () async {
@@ -226,6 +235,16 @@ void main() {
         () => Logpane.instance,
         throwsA(isA<StateError>()),
       );
+    });
+
+    test('isInitialized returns false before initialization', () {
+      expect(Logpane.isInitialized, isFalse);
+    });
+  });
+
+  group('Logpane SDK version', () {
+    test('sdkVersion matches pubspec version', () {
+      expect(Logpane.sdkVersion, equals('0.1.3'));
     });
   });
 }

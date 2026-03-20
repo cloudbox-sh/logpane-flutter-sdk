@@ -46,7 +46,13 @@ class EventQueue {
       },
       onOpen: (db) async {
         // Enable WAL mode for better concurrent performance.
-        await db.execute('PRAGMA journal_mode=WAL');
+        // This is an optimization, not a requirement. Some iOS simulators
+        // and devices may not support it.
+        try {
+          await db.execute('PRAGMA journal_mode=WAL');
+        } catch (_) {
+          // WAL mode is not critical; fall back to default journal mode.
+        }
       },
     );
 
