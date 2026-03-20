@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 /// Collected device and app metadata attached to every event.
@@ -45,15 +45,25 @@ class DeviceMetadata {
 /// Information is gathered once during SDK initialization and cached
 /// for the lifetime of the app. No repeated platform channel calls.
 class DeviceInfoCollector {
-  late DeviceMetadata _info;
+  DeviceMetadata? _info;
 
-  /// Returns the collected device metadata.
-  DeviceMetadata get info => _info;
+  /// Returns the collected device metadata, or null if not yet initialized.
+  DeviceMetadata? get info => _info;
 
   /// Collects device and app information from platform plugins.
   Future<void> initialize() async {
-    final deviceInfoPlugin = DeviceInfoPlugin();
-    final packageInfo = await PackageInfo.fromPlatform();
+    String appVersion = 'unknown';
+    String buildNumber = 'unknown';
+    String packageName = 'unknown';
+
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      appVersion = packageInfo.version;
+      buildNumber = packageInfo.buildNumber;
+      packageName = packageInfo.packageName;
+    } catch (e) {
+      debugPrint('Logpane: failed to collect package info: $e');
+    }
 
     String platform = 'unknown';
     String model = 'unknown';
@@ -61,6 +71,8 @@ class DeviceInfoCollector {
     bool isPhysicalDevice = true;
 
     try {
+      final deviceInfoPlugin = DeviceInfoPlugin();
+
       if (Platform.isAndroid) {
         final androidInfo = await deviceInfoPlugin.androidInfo;
         platform = 'android';
@@ -94,20 +106,25 @@ class DeviceInfoCollector {
             '${windowsInfo.majorVersion}.${windowsInfo.minorVersion}.${windowsInfo.buildNumber}';
         isPhysicalDevice = true;
       }
-    } catch (_) {
-      // Fallback to defaults if device info collection fails.
+    } catch (e) {
+      debugPrint('Logpane: failed to collect device info: $e');
     }
 
-    final locale = PlatformDispatcher.instance.locale.toString();
+    String locale = 'unknown';
+    try {
+      locale = PlatformDispatcher.instance.locale.toString();
+    } catch (e) {
+      debugPrint('Logpane: failed to get locale: $e');
+    }
 
     _info = DeviceMetadata(
       platform: platform,
       model: model,
       osVersion: osVersion,
       isPhysicalDevice: isPhysicalDevice,
-      appVersion: packageInfo.version,
-      buildNumber: packageInfo.buildNumber,
-      packageName: packageInfo.packageName,
+      appVersion: appVersion,
+      buildNumber: buildNumber,
+      packageName: packageName,
       locale: locale,
     );
   }
