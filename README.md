@@ -28,6 +28,7 @@ void main() {
 
     await Logpane.init(
       apiKey: 'YOUR_API_KEY',
+      source: 'flutter-mobile',  // Optional: identifies this app in the dashboard
     );
 
     FlutterError.onError = (details) {
@@ -95,6 +96,7 @@ Logpane.instance.reset();
 - Session management with 30-minute background timeout
 - Device metadata (platform, model, OS, app version)
 - Gzip-compressed event batching
+- Multi-source support (tag events with a source identifier for per-platform filtering)
 - Privacy-friendly (no fingerprinting, opt-out toggle)
 
 ## Configuration
@@ -102,6 +104,7 @@ Logpane.instance.reset();
 ```dart
 await Logpane.init(
   apiKey: 'YOUR_API_KEY',
+  source: 'flutter-mobile',    // Identifies this app/platform in the dashboard
   flushIntervalSeconds: 30,    // How often to send batched events
   maxBatchSize: 50,            // Max events per batch
   maxQueueSize: 1000,          // Max events in offline queue

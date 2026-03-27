@@ -29,12 +29,16 @@ class LogpaneConfig {
   /// Maximum number of events stored locally. Default: 1000.
   final int maxQueueSize;
 
+  /// Source identifier for multi-source tracking. Default: ''.
+  final String source;
+
   const LogpaneConfig({
     required this.apiKey,
     this.endpoint = _defaultEndpoint,
     this.flushIntervalSeconds = 30,
     this.maxBatchSize = 50,
     this.maxQueueSize = 1000,
+    this.source = '',
   });
 }
 
@@ -95,6 +99,7 @@ class Logpane with WidgetsBindingObserver {
   /// after [WidgetsFlutterBinding.ensureInitialized].
   static Future<Logpane> init({
     required String apiKey,
+    String source = '',
     int flushIntervalSeconds = 30,
     int maxBatchSize = 50,
     int maxQueueSize = 1000,
@@ -107,6 +112,7 @@ class Logpane with WidgetsBindingObserver {
 
     final config = LogpaneConfig(
       apiKey: apiKey,
+      source: source,
       flushIntervalSeconds: flushIntervalSeconds,
       maxBatchSize: maxBatchSize,
       maxQueueSize: maxQueueSize,
@@ -450,6 +456,7 @@ class Logpane with WidgetsBindingObserver {
     return {
       'type': type,
       'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'source': _config.source,
       'data': {
         'event': eventName,
         'event_type': eventType,
@@ -479,6 +486,7 @@ class Logpane with WidgetsBindingObserver {
     return {
       'type': 'error',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'source': _config.source,
       'data': {
         'exception_type': exceptionType,
         'message': message,
